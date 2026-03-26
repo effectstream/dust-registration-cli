@@ -7,6 +7,7 @@ import { listWallets } from './commands/list-wallets.ts';
 import { findUtxos } from './commands/find-utxos.ts';
 import { findMidnightBalance } from './commands/find-midnight-balance.ts';
 import { buildTx } from './commands/build-tx.ts';
+import { buildUpdateTx } from './commands/build-update-tx.ts';
 import { signTx } from './commands/sign-tx.ts';
 import { submitTx } from './commands/submit-tx.ts';
 
@@ -72,6 +73,15 @@ program
   .requiredOption('--midnight-wallet <name>', 'Midnight wallet name')
   .action(async (opts) => {
     await buildTx(opts.cardanoWallet, opts.midnightWallet);
+  });
+
+program
+  .command('build-update-tx')
+  .description('Build a transaction to update an existing DUST registration with a new dust address')
+  .requiredOption('--cardano-wallet <name>', 'Cardano wallet name')
+  .requiredOption('--midnight-wallet <name>', 'New Midnight wallet name (with corrected dust address)')
+  .action(async (opts) => {
+    await buildUpdateTx(opts.cardanoWallet, opts.midnightWallet);
   });
 
 program
