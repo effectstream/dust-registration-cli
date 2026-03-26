@@ -16,8 +16,8 @@ export async function createMidnightWallet(name: string) {
   const { generateMnemonic, mnemonicToSeedSync } = await import('@scure/bip39');
   const { wordlist } = await import('@scure/bip39/wordlists/english.js');
   const { HDWallet, Roles } = await import('@midnight-ntwrk/wallet-sdk-hd');
-  const { BLSScalar, DustAddress, MidnightBech32m } = await import('@midnight-ntwrk/wallet-sdk-address-format');
-  const { SecretKeys } = await import('@midnight-ntwrk/ledger');
+  const { DustAddress, MidnightBech32m } = await import('@midnight-ntwrk/wallet-sdk-address-format');
+  const { DustSecretKey } = await import('@midnight-ntwrk/ledger-v8');
 
   // 1. Generate 24-word mnemonic (can be imported in a browser wallet)
   const mnemonic = generateMnemonic(wordlist, 256);
@@ -45,15 +45,13 @@ export async function createMidnightWallet(name: string) {
   const dustKeyBytes = derivationResult.keys[Roles.Dust];
   hdWallet.hdWallet.clear();
 
-  // 4. Derive the coin public key from the secret key
-  const secretKeys = SecretKeys.fromSeed(dustKeyBytes);
-  const coinPubKeyHex: string = secretKeys.coinPublicKey;
-  if (typeof (secretKeys as any).free === 'function') (secretKeys as any).free();
+  // 4. Derive the dust public key from the dust seed
+  const dustSecretKey = DustSecretKey.fromSeed(dustKeyBytes);
+  const dustPublicKey = dustSecretKey.publicKey;
+  dustSecretKey.clear();
 
-  // 5. Convert to BLS scalar (little-endian) and create DustAddress
-  const leHex = Buffer.from(coinPubKeyHex, 'hex').reverse().toString('hex');
-  const scalar = BigInt('0x' + leHex) % BLSScalar.modulus;
-  const dustAddr = new DustAddress(scalar);
+  // 5. Create DustAddress from the public key
+  const dustAddr = new DustAddress(dustPublicKey);
 
   // 6. Encode as bech32m DUST address
   const dustAddress = MidnightBech32m.encode(
