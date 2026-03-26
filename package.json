@@ -1,0 +1,36 @@
+{
+  "name": "dust-registration-cli",
+  "version": "0.1.0",
+  "description": "CLI tool for DUST address registration on Cardano",
+  "type": "module",
+  "scripts": {
+    "cli": "tsx src/index.ts",
+    "build": "tsc",
+    "postinstall": "cp node_modules/libsodium-sumo/dist/modules-sumo-esm/libsodium-sumo.mjs node_modules/libsodium-wrappers-sumo/dist/modules-sumo-esm/libsodium-sumo.mjs 2>/dev/null || true"
+  },
+  "dependencies": {
+    "@blaze-cardano/core": "^0.7.0",
+    "@blaze-cardano/data": "^0.6.6",
+    "@blaze-cardano/uplc": "^0.4.3",
+    "@lucid-evolution/lucid": "^0.4.29",
+    "@meshsdk/core": "^1.8.14",
+    "@meshsdk/wallet": "^1.8.14",
+    "@midnight-ntwrk/ledger": "^4.0.0",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.0.2",
+    "@midnight-ntwrk/midnight-js-utils": "^4.0.2",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.1",
+    "@scure/bip39": "^2.0.1",
+    "commander": "^13.0.0",
+    "dotenv": "^16.4.0",
+    "libsodium-wrappers-sumo": "0.7.16"
+  },
+  "overrides": {
+    "libsodium-wrappers-sumo": "0.7.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
