@@ -75,6 +75,14 @@ node src/index.ts build-tx --cardano-wallet my-wallet --midnight-wallet my-midni
 ```
 Builds an unsigned transaction that mints a DUST NFT and creates the registration datum on-chain.
 
+### Update registration (change DUST address)
+
+```bash
+node src/index.ts build-update-tx --cardano-wallet my-wallet --midnight-wallet my-new-midnight
+```
+
+Updates an existing DUST registration to point to a new Midnight dust address. Finds the existing registration UTxO on-chain, consumes it, and creates a new one with the same DUST NFT but updated datum. No minting or burning — the auth token is preserved.
+
 ### Sign transaction
 
 ```bash
@@ -127,6 +135,17 @@ The CLI builds the exact same transaction as the dApp's `buildRegistrationTransa
 | Validator address           | Derived from the script via `addressFromValidator`                                                           |
 | `LOVELACE_FOR_REGISTRATION` | 1,586,080 lovelace                                                                                           |
 
+
+## Update transaction
+
+The `build-update-tx` command builds the same transaction as the dApp's `buildUpdateTransaction`:
+
+1. **Inputs** — all cNIGHT UTxOs (rotation) + existing registration UTxO (consumed with `Data.void()` redeemer)
+2. **No mint/burn** — the DUST NFT is preserved, not re-minted
+3. **Output** — new UTxO at the same validator address with updated `DustMappingDatum` (same stake key hash, new dust address) and the same DUST NFT
+4. **Withdrawal** — withdraws the exact withdrawable amount from the script stake address (required for script authorization)
+5. **Scripts attached** — both `SpendingValidator` and `WithdrawalValidator`
+6. **Required signers** — payment address + stake address
 
 #### cNIGHT token identifiers per network
 
