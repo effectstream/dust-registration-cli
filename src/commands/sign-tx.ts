@@ -5,6 +5,7 @@ import { loadCardanoWallet, loadTempFile, saveTempFile } from '../lib/storage.ts
 interface UnsignedTxFile {
   cardanoWallet: string;
   midnightWallet: string;
+  accountIndex: number;
   network: string;
   timestamp: string;
   unsignedTx: string;
@@ -14,12 +15,18 @@ interface UnsignedTxFile {
   dustPKH: string;
 }
 
-export async function signTx(walletName: string, txFilePath: string) {
+export async function signTx(walletName: string, txFilePath: string, accountIndex: number) {
   const config = loadConfig();
   const walletFile = loadCardanoWallet(walletName);
   const txFile = loadTempFile<UnsignedTxFile>(txFilePath);
 
-  console.log(`Signing transaction with wallet "${walletName}"...`);
+  if (txFile.accountIndex !== undefined && txFile.accountIndex !== accountIndex) {
+    throw new Error(
+      `Account index mismatch: transaction was built with account ${txFile.accountIndex}, but --account ${accountIndex} was provided. Use --account ${txFile.accountIndex} to sign.`
+    );
+  }
+
+  console.log(`Signing transaction with wallet "${walletName}" (account ${accountIndex})...`);
 
   // Initialize Lucid with Blockfrost
   const lucid = await Lucid(
@@ -27,8 +34,8 @@ export async function signTx(walletName: string, txFilePath: string) {
     config.network,
   );
 
-  // Select wallet from mnemonic
-  lucid.selectWallet.fromSeed(walletFile.mnemonic.join(' '));
+  // Select wallet from mnemonic at the specified account index
+  lucid.selectWallet.fromSeed(walletFile.mnemonic.join(' '), { accountIndex });
 
   // Reconstruct the completed tx from CBOR and sign
   console.log(`Signing with payment and stake keys...`);
@@ -40,6 +47,7 @@ export async function signTx(walletName: string, txFilePath: string) {
   const filePath = saveTempFile('signed-tx', {
     cardanoWallet: txFile.cardanoWallet,
     midnightWallet: txFile.midnightWallet,
+    accountIndex,
     network: txFile.network,
     timestamp: new Date().toISOString(),
     signedTx: signedTxCbor,
@@ -51,5 +59,5 @@ export async function signTx(walletName: string, txFilePath: string) {
 
   console.log(`\nTransaction signed successfully!`);
   console.log(`  Saved to: ${filePath}`);
-  console.log(`\nNext step: submit-tx --tx-file "${filePath}"`);
+  console.log(`\nNext step: submit-tx --tx-file "${filePath}" --account ${accountIndex}`);
 }
