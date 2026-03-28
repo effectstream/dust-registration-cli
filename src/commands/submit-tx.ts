@@ -5,6 +5,7 @@ import { loadTempFile } from '../lib/storage.ts';
 interface SignedTxFile {
   cardanoWallet: string;
   midnightWallet: string;
+  accountIndex: number;
   network: string;
   timestamp: string;
   signedTx: string;
@@ -14,11 +15,17 @@ interface SignedTxFile {
   dustPKH: string;
 }
 
-export async function submitTx(txFilePath: string, poll: boolean) {
+export async function submitTx(txFilePath: string, poll: boolean, accountIndex: number) {
   const config = loadConfig();
   const txFile = loadTempFile<SignedTxFile>(txFilePath);
 
-  console.log(`Submitting transaction on ${config.network}...`);
+  if (txFile.accountIndex !== undefined && txFile.accountIndex !== accountIndex) {
+    throw new Error(
+      `Account index mismatch: transaction was built with account ${txFile.accountIndex}, but --account ${accountIndex} was provided. Use --account ${txFile.accountIndex} to submit.`
+    );
+  }
+
+  console.log(`Submitting transaction on ${config.network} (account ${accountIndex})...`);
 
   // Submit directly via Blockfrost provider
   const provider = new Blockfrost(config.blockfrostUrl, config.blockfrostApiKey);

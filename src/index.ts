@@ -9,6 +9,7 @@ import { findMidnightBalance } from './commands/find-midnight-balance.ts';
 import { buildTx } from './commands/build-tx.ts';
 import { signTx } from './commands/sign-tx.ts';
 import { submitTx } from './commands/submit-tx.ts';
+import { checkRegistration } from './commands/check-registration.ts';
 
 const program = new Command();
 
@@ -45,8 +46,11 @@ program
 program
   .command('list-wallets')
   .description('List all saved wallets and their addresses')
-  .action(async () => {
-    await listWallets();
+  .option('--cardano-wallet <name>', 'Show a specific Cardano wallet with derived addresses')
+  .option('--n <count>', 'Number of CIP-1852 addresses to derive (default: 10)', parseInt)
+  .option('--stake', 'Show staking addresses instead of payment addresses')
+  .action(async (opts) => {
+    await listWallets(opts.cardanoWallet, opts.n, opts.stake);
   });
 
 program
@@ -55,6 +59,7 @@ program
   .option('--wallet <name>', 'Cardano wallet name')
   .option('--midnight-wallet <name>', 'Midnight wallet name (queries shielded/unshielded/dust)')
   .option('--all', 'Query all wallets (Cardano and Midnight)')
+  .option('--n <count>', 'Number of accounts to query (default: 1)', parseInt)
   .action(async (opts) => {
     if (opts.all) {
       const { listCardanoWallets, listMidnightWallets } = await import('./lib/storage.ts');
@@ -62,7 +67,7 @@ program
       const midnightWallets = listMidnightWallets();
       for (const w of cardanoWallets) {
         console.log(`\n=== Cardano: ${w.name} ===`);
-        await findUtxos(w.name);
+        await findUtxos(w.name, opts.n);
       }
       for (const w of midnightWallets) {
         console.log(`\n=== Midnight: ${w.name} ===`);
@@ -74,7 +79,7 @@ program
     } else if (opts.midnightWallet) {
       await findMidnightBalance(opts.midnightWallet);
     } else if (opts.wallet) {
-      await findUtxos(opts.wallet);
+      await findUtxos(opts.wallet, opts.n);
     } else {
       console.error('Error: Provide either --wallet (Cardano), --midnight-wallet (Midnight), or --all');
       process.exit(1);
@@ -86,8 +91,9 @@ program
   .description('Build a DUST registration transaction')
   .requiredOption('--cardano-wallet <name>', 'Cardano wallet name')
   .requiredOption('--midnight-wallet <name>', 'Midnight wallet name')
+  .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
   .action(async (opts) => {
-    await buildTx(opts.cardanoWallet, opts.midnightWallet);
+    await buildTx(opts.cardanoWallet, opts.midnightWallet, opts.account);
   });
 
 program
@@ -95,17 +101,28 @@ program
   .description('Sign an unsigned transaction')
   .requiredOption('--wallet <name>', 'Cardano wallet name (for signing keys)')
   .requiredOption('--tx-file <path>', 'Path to unsigned transaction JSON file')
+  .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
   .action(async (opts) => {
-    await signTx(opts.wallet, opts.txFile);
+    await signTx(opts.wallet, opts.txFile, opts.account);
   });
 
 program
   .command('submit-tx')
   .description('Submit a signed transaction to the network')
   .requiredOption('--tx-file <path>', 'Path to signed transaction JSON file')
+  .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
   .option('--poll', 'Wait for transaction confirmation', false)
   .action(async (opts) => {
-    await submitTx(opts.txFile, opts.poll);
+    await submitTx(opts.txFile, opts.poll, opts.account);
+  });
+
+program
+  .command('check-registration')
+  .description('Check DUST registration status via Midnight indexer')
+  .requiredOption('--wallet <name>', 'Cardano wallet name')
+  .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
+  .action(async (opts) => {
+    await checkRegistration(opts.wallet, opts.account);
   });
 
 program.parseAsync().catch((err) => {

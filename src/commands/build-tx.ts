@@ -10,13 +10,13 @@ import {
   getLucidScript,
 } from '../lib/contract.ts';
 
-export async function buildTx(cardanoWalletName: string, midnightWalletName: string) {
+export async function buildTx(cardanoWalletName: string, midnightWalletName: string, accountIndex: number) {
   const config = loadConfig();
   const cardanoWallet = loadCardanoWallet(cardanoWalletName);
   const midnightWallet = loadMidnightWallet(midnightWalletName);
 
   console.log(`Building registration transaction...`);
-  console.log(`  Cardano wallet: ${cardanoWalletName} (${cardanoWallet.address})`);
+  console.log(`  Cardano wallet: ${cardanoWalletName} (account ${accountIndex})`);
   console.log(`  Midnight wallet: ${midnightWalletName} (${midnightWallet.dustAddress})`);
   console.log(`  Network: ${config.network}`);
 
@@ -26,8 +26,8 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
     config.network,
   );
 
-  // Select wallet from mnemonic
-  lucid.selectWallet.fromSeed(cardanoWallet.mnemonic.join(' '));
+  // Select wallet from mnemonic at the specified account index
+  lucid.selectWallet.fromSeed(cardanoWallet.mnemonic.join(' '), { accountIndex });
 
   // Get address details
   const walletAddress = await lucid.wallet().address();
@@ -104,6 +104,7 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
   const filePath = saveTempFile('unsigned-tx', {
     cardanoWallet: cardanoWalletName,
     midnightWallet: midnightWalletName,
+    accountIndex,
     network: config.network,
     timestamp: new Date().toISOString(),
     unsignedTx,
@@ -115,5 +116,5 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
 
   console.log(`\nTransaction built successfully!`);
   console.log(`  Saved to: ${filePath}`);
-  console.log(`\nNext step: sign-tx --wallet ${cardanoWalletName} --tx-file "${filePath}"`);
+  console.log(`\nNext step: sign-tx --wallet ${cardanoWalletName} --tx-file "${filePath}" --account ${accountIndex}`);
 }
