@@ -55,13 +55,29 @@ program
   .description('Query blockchain for UTxOs / balances (Cardano or Midnight)')
   .option('--wallet <name>', 'Cardano wallet name')
   .option('--midnight-wallet <name>', 'Midnight wallet name (queries shielded/unshielded/dust)')
+  .option('--all', 'Query all wallets (Cardano and Midnight)')
   .action(async (opts) => {
-    if (opts.midnightWallet) {
+    if (opts.all) {
+      const { listCardanoWallets, listMidnightWallets } = await import('./lib/storage.ts');
+      const cardanoWallets = listCardanoWallets();
+      const midnightWallets = listMidnightWallets();
+      for (const w of cardanoWallets) {
+        console.log(`\n=== Cardano: ${w.name} ===`);
+        await findUtxos(w.name);
+      }
+      for (const w of midnightWallets) {
+        console.log(`\n=== Midnight: ${w.name} ===`);
+        await findMidnightBalance(w.name);
+      }
+      if (cardanoWallets.length === 0 && midnightWallets.length === 0) {
+        console.log('No wallets found. Create one first.');
+      }
+    } else if (opts.midnightWallet) {
       await findMidnightBalance(opts.midnightWallet);
     } else if (opts.wallet) {
       await findUtxos(opts.wallet);
     } else {
-      console.error('Error: Provide either --wallet (Cardano) or --midnight-wallet (Midnight)');
+      console.error('Error: Provide either --wallet (Cardano), --midnight-wallet (Midnight), or --all');
       process.exit(1);
     }
   });
