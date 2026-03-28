@@ -45,8 +45,11 @@ program
 program
   .command('list-wallets')
   .description('List all saved wallets and their addresses')
-  .action(async () => {
-    await listWallets();
+  .option('--cardano-wallet <name>', 'Show a specific Cardano wallet with derived addresses')
+  .option('--n <count>', 'Number of CIP-1852 addresses to derive (default: 10)', parseInt)
+  .option('--stake', 'Show staking addresses instead of payment addresses')
+  .action(async (opts) => {
+    await listWallets(opts.cardanoWallet, opts.n, opts.stake);
   });
 
 program
@@ -55,6 +58,7 @@ program
   .option('--wallet <name>', 'Cardano wallet name')
   .option('--midnight-wallet <name>', 'Midnight wallet name (queries shielded/unshielded/dust)')
   .option('--all', 'Query all wallets (Cardano and Midnight)')
+  .option('--n <count>', 'Number of accounts to query (default: 1)', parseInt)
   .action(async (opts) => {
     if (opts.all) {
       const { listCardanoWallets, listMidnightWallets } = await import('./lib/storage.ts');
@@ -62,7 +66,7 @@ program
       const midnightWallets = listMidnightWallets();
       for (const w of cardanoWallets) {
         console.log(`\n=== Cardano: ${w.name} ===`);
-        await findUtxos(w.name);
+        await findUtxos(w.name, opts.n);
       }
       for (const w of midnightWallets) {
         console.log(`\n=== Midnight: ${w.name} ===`);
@@ -74,7 +78,7 @@ program
     } else if (opts.midnightWallet) {
       await findMidnightBalance(opts.midnightWallet);
     } else if (opts.wallet) {
-      await findUtxos(opts.wallet);
+      await findUtxos(opts.wallet, opts.n);
     } else {
       console.error('Error: Provide either --wallet (Cardano), --midnight-wallet (Midnight), or --all');
       process.exit(1);
