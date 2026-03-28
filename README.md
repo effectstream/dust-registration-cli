@@ -57,37 +57,61 @@ Generates a random seed and derives the DUST address.
 ### List wallets
 
 ```bash
+# List all wallets
 node src/index.ts list-wallets
+
+# Show first 10 CIP-1852 payment addresses for a specific wallet
+node src/index.ts list-wallets --cardano-wallet my-wallet --n 10
+
+# Show staking addresses instead
+node src/index.ts list-wallets --cardano-wallet my-wallet --n 10 --stake
 ```
+
+`--n` controls how many account indices to derive (default: 10).
 
 ### Find UTxOs
 
 ```bash
+# Single account (default: account 0)
 node src/index.ts find-utxos --wallet my-wallet
+
+# Query first 3 accounts with per-account breakdown
+node src/index.ts find-utxos --wallet my-wallet --n 3
 ```
 
-Queries Blockfrost for UTxOs including cNIGHT tokens.
+Queries Blockfrost for UTxOs including cNIGHT tokens. With `--n`, shows balances per account and a grand total.
 
 ### Build registration transaction
 
 ```bash
-node src/index.ts build-tx --cardano-wallet my-wallet --midnight-wallet my-midnight
+node src/index.ts build-tx --cardano-wallet my-wallet --midnight-wallet my-midnight --account 0
 ```
-Builds an unsigned transaction that mints a DUST NFT and creates the registration datum on-chain.
+
+Builds an unsigned transaction that mints a DUST NFT and creates the registration datum on-chain. `--account` selects the CIP-1852 account index, which determines the payment address and stake key used.
 
 ### Sign transaction
 
 ```bash
-node src/index.ts sign-tx --wallet my-wallet --tx-file ~/.dust-cli/temp/unsigned-tx-xxx.json
+node src/index.ts sign-tx --wallet my-wallet --tx-file ~/.dust-cli/temp/unsigned-tx-xxx.json --account 0
 ```
+
+The `--account` must match the account used during `build-tx`. A mismatch is rejected with an error.
 
 ### Submit transaction
 
 ```bash
-node src/index.ts submit-tx --tx-file ~/.dust-cli/temp/signed-tx-xxx.json --poll
+node src/index.ts submit-tx --tx-file ~/.dust-cli/temp/signed-tx-xxx.json --account 0 --poll
 ```
 
-The `--poll` flag waits for on-chain confirmation.
+The `--account` must match the account used during `build-tx`/`sign-tx`. The `--poll` flag waits for on-chain confirmation.
+
+### Check registration status
+
+```bash
+node src/index.ts check-registration --wallet my-wallet --account 0
+```
+
+Queries the Midnight indexer for the DUST registration status of the staking address derived from the given account. Shows registration state, DUST address, NIGHT balance, generation rate, and current capacity.
 
 ## Wallet Storage
 
