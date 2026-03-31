@@ -294,14 +294,6 @@ export async function fetchMidnightBalance(
         /* ignore */
       }
 
-      // Persist dust wallet state for faster future syncs
-      try {
-        const serialized = await (wallet as any).dust.serializeState();
-        saveDustState(walletName, serialized);
-        console.log(`[${walletName}] Dust state cached.`);
-      } catch (_e) {
-        /* non-fatal */
-      }
     } else {
       console.log(`[${walletName}] Syncing wallet state...`);
 
@@ -403,6 +395,16 @@ export async function fetchMidnightBalance(
     console.error(`[${walletName}] Error: ${result.error}`);
   } finally {
     if (wallet) {
+      // Persist dust wallet state (even on error/timeout) for faster resume
+      if (onlyDust) {
+        try {
+          const serialized = await (wallet as any).dust.serializeState();
+          saveDustState(walletName, serialized);
+          console.log(`[${walletName}] Dust state cached.`);
+        } catch (_e) {
+          /* non-fatal */
+        }
+      }
       try {
         await wallet.stop();
       } catch (_e) {
