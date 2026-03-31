@@ -10,7 +10,7 @@ import {
   getLucidScript,
 } from '../lib/contract.ts';
 
-export async function buildTx(cardanoWalletName: string, midnightWalletName: string, accountIndex: number) {
+export async function buildTx(cardanoWalletName: string, midnightWalletName: string, accountIndex: number): Promise<string> {
   const config = loadConfig();
   const cardanoWallet = loadCardanoWallet(cardanoWalletName);
   const midnightWallet = loadMidnightWallet(midnightWalletName);
@@ -117,4 +117,6 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
   console.log(`\nTransaction built successfully!`);
   console.log(`  Saved to: ${filePath}`);
   console.log(`\nNext step: sign-tx --wallet ${cardanoWalletName} --tx-file "${filePath}" --account ${accountIndex}`);
+
+  return filePath;
 }

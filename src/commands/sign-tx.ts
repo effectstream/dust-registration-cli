@@ -15,7 +15,7 @@ interface UnsignedTxFile {
   dustPKH: string;
 }
 
-export async function signTx(walletName: string, txFilePath: string, accountIndex: number) {
+export async function signTx(walletName: string, txFilePath: string, accountIndex: number): Promise<string> {
   const config = loadConfig();
   const walletFile = loadCardanoWallet(walletName);
   const txFile = loadTempFile<UnsignedTxFile>(txFilePath);
@@ -60,4 +60,6 @@ export async function signTx(walletName: string, txFilePath: string, accountInde
   console.log(`\nTransaction signed successfully!`);
   console.log(`  Saved to: ${filePath}`);
   console.log(`\nNext step: submit-tx --tx-file "${filePath}" --account ${accountIndex}`);
+
+  return filePath;
 }
