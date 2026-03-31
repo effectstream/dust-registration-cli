@@ -14,6 +14,7 @@
 import { Buffer } from 'node:buffer';
 import * as Rx from 'rxjs';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { loadDustState, saveDustState } from './storage.ts';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 
 // ---------- Types ----------
@@ -133,6 +134,7 @@ export async function fetchMidnightBalance(
   seed: string,
   midnightNetworkId: string,
   timeoutMs?: number,
+  onlyDust?: boolean,
 ): Promise<MidnightBalanceResult> {
   const result: MidnightBalanceResult = {
     name: walletName,
@@ -211,7 +213,14 @@ export async function fetchMidnightBalance(
       shielded: (config: any) => ShieldedWallet(config).startWithSeed(shieldedSeed),
       unshielded: (config: any) =>
         UnshieldedWallet(config).startWithPublicKey(unshieldedPublicKey),
-      dust: (config: any) => DustWallet(config).startWithSeed(dustSeed, dustParameters),
+      dust: (config: any) => {
+        const savedState = onlyDust ? loadDustState(walletName) : null;
+        if (savedState) {
+          console.log(`[${walletName}] Restoring dust wallet from cached state...`);
+          return DustWallet(config).restore(savedState);
+        }
+        return DustWallet(config).startWithSeed(dustSeed, dustParameters);
+      },
       provingService: () =>
         makeServerProvingService({
           provingServerUrl: new URL(networkConfig.proofServer),
@@ -229,96 +238,163 @@ export async function fetchMidnightBalance(
 
     console.log(`  Unshielded: ${unshieldedAddress}`);
     console.log(`  Dust:       ${result.dustAddress}`);
-    console.log(`[${walletName}] Syncing wallet state...`);
+    if (onlyDust) {
+      console.log(`[${walletName}] Syncing dust wallet only...`);
 
-    // Wait for all wallet components to sync
-    const state: any = await Rx.firstValueFrom(
-      wallet.state().pipe(
-        Rx.throttleTime(WALLET_SYNC_THROTTLE_MS),
-        Rx.tap((s: any) => {
-          const isSynced = s.isSynced ?? false;
-          const shieldedSynced =
-            s.shielded?.state?.progress?.isStrictlyComplete?.() || isSynced;
-          const dustSynced =
-            s.dust?.state?.progress?.isStrictlyComplete?.() || isSynced;
-          const unshieldedSynced = s.unshielded?.syncProgress?.synced ?? isSynced;
-          const unshieldedBal = sumUnshieldedBalances(s.unshielded?.balances);
-          console.log(
-            `[${walletName}] sync: shielded=${shieldedSynced}, unshielded=${unshieldedSynced}, dust=${dustSynced} | unshieldedBal=${unshieldedBal}`,
-          );
-        }),
-        Rx.filter((s: any) => {
-          const isSynced = s.isSynced ?? false;
-          const shieldedSynced =
-            s.shielded?.state?.progress?.isStrictlyComplete?.() || isSynced;
-          const dustSynced =
-            s.dust?.state?.progress?.isStrictlyComplete?.() || isSynced;
-          const unshieldedSynced = s.unshielded?.syncProgress?.synced ?? isSynced;
-          return shieldedSynced && dustSynced && unshieldedSynced;
-        }),
-        Rx.timeout({
-          each: syncTimeout,
-          with: () =>
-            Rx.throwError(() => new Error(`Wallet sync timeout after ${syncTimeout}ms`)),
-        }),
-      ),
-    );
-
-    console.log(`[${walletName}] Sync complete, reading balances...`);
-
-    // --- Shielded tokens ---
-    try {
-      const shieldedBalances = state.shielded?.balances as Record<string, bigint> | undefined;
-      if (shieldedBalances) {
-        for (const [tokenId, balance] of Object.entries(shieldedBalances)) {
-          if (balance > 0n) {
-            result.shieldedTokens.push({ tokenId, balance });
-          }
-        }
-      }
-      const shieldedState: any = await Rx.firstValueFrom((wallet as any).shielded.state);
-      if (shieldedState.availableCoins) result.shieldedUtxos = shieldedState.availableCoins.length;
-    } catch (_e) {
-      /* ignore */
-    }
-
-    // --- Unshielded tokens ---
-    try {
-      const unshieldedBalances = state.unshielded?.balances as
-        | Map<string, bigint>
-        | Record<string, bigint>
-        | undefined;
-      if (unshieldedBalances) {
-        const entries =
-          unshieldedBalances instanceof Map
-            ? Array.from(unshieldedBalances.entries())
-            : Object.entries(unshieldedBalances);
-        for (const [tokenId, balance] of entries) {
-          if (balance > 0n) {
-            result.unshieldedTokens.push({ tokenId, balance });
-          }
-        }
-      }
-      const unshieldedState: any = await Rx.firstValueFrom(
-        (wallet as any).unshielded.state,
+      // Use DustWallet's own sync observable with correct path: state.state.progress
+      // (dust wallet's highestRelevantWalletIndex is populated from indexer, unlike highestIndex)
+      // Use isCompleteWithin(50n) instead of isStrictlyComplete() to tolerate small gaps
+      // when the chain tip moves during sync. Also detect appliedIndex stabilization as fallback.
+      let lastAppliedIndex = -1n;
+      const dustSyncedState: any = await Rx.firstValueFrom(
+        (wallet as any).dust.state.pipe(
+          Rx.throttleTime(WALLET_SYNC_THROTTLE_MS),
+          // Timeout resets on every emission — only fires if sync stalls completely
+          Rx.timeout({
+            each: syncTimeout,
+            with: () =>
+              Rx.throwError(() => new Error(`Wallet sync stalled (no progress for ${syncTimeout / 1000}s)`)),
+          }),
+          Rx.tap((ds: any) => {
+            const p = ds.state?.progress;
+            const applied = p?.appliedIndex ?? 0n;
+            const target = p?.highestRelevantWalletIndex ?? 0n;
+            const synced = typeof p?.isCompleteWithin === 'function' ? p.isCompleteWithin(50n) : false;
+            console.log(
+              `[${walletName}] sync: dust=${synced} applied=${applied}/${target} (dust-only mode)`,
+            );
+          }),
+          Rx.filter((ds: any) => {
+            const p = ds.state?.progress;
+            if (typeof p?.isCompleteWithin === 'function' && p.isCompleteWithin(50n)) {
+              return true;
+            }
+            // Fallback: if appliedIndex stabilized and connected, consider synced
+            const applied = BigInt(p?.appliedIndex ?? 0);
+            if (applied > 0n && p?.isConnected && applied === lastAppliedIndex) {
+              return true;
+            }
+            lastAppliedIndex = applied;
+            return false;
+          }),
+        ),
       );
-      if (unshieldedState.availableCoins)
-        result.unshieldedUtxos = unshieldedState.availableCoins.length;
-    } catch (_e) {
-      /* ignore */
-    }
 
-    // --- Dust balance ---
-    try {
-      const dustStateSync: any = await Rx.firstValueFrom((wallet as any).dust.state);
-      if (typeof dustStateSync.balance === 'function') {
-        result.dustBalance = dustStateSync.balance(new Date());
-      } else if (typeof dustStateSync.walletBalance === 'function') {
-        result.dustBalance = dustStateSync.walletBalance(new Date());
+      console.log(`[${walletName}] Dust sync complete, reading balance...`);
+
+      // --- Dust balance ---
+      try {
+        if (typeof dustSyncedState.balance === 'function') {
+          result.dustBalance = dustSyncedState.balance(new Date());
+        } else if (typeof dustSyncedState.walletBalance === 'function') {
+          result.dustBalance = dustSyncedState.walletBalance(new Date());
+        }
+        if (dustSyncedState.availableCoins) result.dustUtxos = dustSyncedState.availableCoins.length;
+      } catch (_e) {
+        /* ignore */
       }
-      if (dustStateSync.availableCoins) result.dustUtxos = dustStateSync.availableCoins.length;
-    } catch (_e) {
-      /* ignore */
+
+      // Persist dust wallet state for faster future syncs
+      try {
+        const serialized = await (wallet as any).dust.serializeState();
+        saveDustState(walletName, serialized);
+        console.log(`[${walletName}] Dust state cached.`);
+      } catch (_e) {
+        /* non-fatal */
+      }
+    } else {
+      console.log(`[${walletName}] Syncing wallet state...`);
+
+      // Wait for all wallet components to sync
+      const state: any = await Rx.firstValueFrom(
+        wallet.state().pipe(
+          Rx.throttleTime(WALLET_SYNC_THROTTLE_MS),
+          // Timeout resets on every emission — only fires if sync stalls completely
+          Rx.timeout({
+            each: syncTimeout,
+            with: () =>
+              Rx.throwError(() => new Error(`Wallet sync stalled (no progress for ${syncTimeout / 1000}s)`)),
+          }),
+          Rx.tap((s: any) => {
+            const isSynced = s.isSynced ?? false;
+            const shieldedSynced =
+              s.shielded?.state?.progress?.isStrictlyComplete?.() || isSynced;
+            const dustSynced =
+              s.dust?.state?.progress?.isStrictlyComplete?.() || isSynced;
+            const unshieldedSynced = s.unshielded?.syncProgress?.synced ?? isSynced;
+            const unshieldedBal = sumUnshieldedBalances(s.unshielded?.balances);
+            console.log(
+              `[${walletName}] sync: shielded=${shieldedSynced}, unshielded=${unshieldedSynced}, dust=${dustSynced} | unshieldedBal=${unshieldedBal}`,
+            );
+          }),
+          Rx.filter((s: any) => {
+            const isSynced = s.isSynced ?? false;
+            const shieldedSynced =
+              s.shielded?.state?.progress?.isStrictlyComplete?.() || isSynced;
+            const dustSynced =
+              s.dust?.state?.progress?.isStrictlyComplete?.() || isSynced;
+            const unshieldedSynced = s.unshielded?.syncProgress?.synced ?? isSynced;
+            return shieldedSynced && dustSynced && unshieldedSynced;
+          }),
+        ),
+      );
+
+      console.log(`[${walletName}] Sync complete, reading balances...`);
+
+      // --- Shielded tokens ---
+      try {
+        const shieldedBalances = state.shielded?.balances as Record<string, bigint> | undefined;
+        if (shieldedBalances) {
+          for (const [tokenId, balance] of Object.entries(shieldedBalances)) {
+            if (balance > 0n) {
+              result.shieldedTokens.push({ tokenId, balance });
+            }
+          }
+        }
+        const shieldedState: any = await Rx.firstValueFrom((wallet as any).shielded.state);
+        if (shieldedState.availableCoins) result.shieldedUtxos = shieldedState.availableCoins.length;
+      } catch (_e) {
+        /* ignore */
+      }
+
+      // --- Unshielded tokens ---
+      try {
+        const unshieldedBalances = state.unshielded?.balances as
+          | Map<string, bigint>
+          | Record<string, bigint>
+          | undefined;
+        if (unshieldedBalances) {
+          const entries =
+            unshieldedBalances instanceof Map
+              ? Array.from(unshieldedBalances.entries())
+              : Object.entries(unshieldedBalances);
+          for (const [tokenId, balance] of entries) {
+            if (balance > 0n) {
+              result.unshieldedTokens.push({ tokenId, balance });
+            }
+          }
+        }
+        const unshieldedState: any = await Rx.firstValueFrom(
+          (wallet as any).unshielded.state,
+        );
+        if (unshieldedState.availableCoins)
+          result.unshieldedUtxos = unshieldedState.availableCoins.length;
+      } catch (_e) {
+        /* ignore */
+      }
+
+      // --- Dust balance ---
+      try {
+        const dustStateSync: any = await Rx.firstValueFrom((wallet as any).dust.state);
+        if (typeof dustStateSync.balance === 'function') {
+          result.dustBalance = dustStateSync.balance(new Date());
+        } else if (typeof dustStateSync.walletBalance === 'function') {
+          result.dustBalance = dustStateSync.walletBalance(new Date());
+        }
+        if (dustStateSync.availableCoins) result.dustUtxos = dustStateSync.availableCoins.length;
+      } catch (_e) {
+        /* ignore */
+      }
     }
 
     console.log(`[${walletName}] Done.`);

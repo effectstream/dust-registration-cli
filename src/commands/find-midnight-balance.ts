@@ -2,7 +2,7 @@ import { loadConfig } from '../lib/config.ts';
 import { loadMidnightWallet } from '../lib/storage.ts';
 import { fetchMidnightBalance } from '../lib/midnight-wallet.ts';
 
-export async function findMidnightBalance(walletName: string) {
+export async function findMidnightBalance(walletName: string, onlyDust?: boolean) {
   const config = loadConfig();
   const walletFile = loadMidnightWallet(walletName);
 
@@ -13,6 +13,8 @@ export async function findMidnightBalance(walletName: string) {
     walletName,
     walletFile.seed,
     config.midnightNetworkId,
+    undefined,
+    onlyDust,
   );
 
   if (result.error) {
@@ -27,21 +29,23 @@ export async function findMidnightBalance(walletName: string) {
   console.log(`  Unshielded Address: ${result.unshieldedAddress}`);
   console.log(`  Dust Address:       ${result.dustAddress}`);
 
-  console.log(`\n  Shielded: (${result.shieldedUtxos} UTXOs)`);
-  if (result.shieldedTokens.length === 0) {
-    console.log(`    (none)`);
-  } else {
-    for (const t of result.shieldedTokens) {
-      console.log(`    ${t.tokenId}: ${t.balance}`);
+  if (!onlyDust) {
+    console.log(`\n  Shielded: (${result.shieldedUtxos} UTXOs)`);
+    if (result.shieldedTokens.length === 0) {
+      console.log(`    (none)`);
+    } else {
+      for (const t of result.shieldedTokens) {
+        console.log(`    ${t.tokenId}: ${t.balance}`);
+      }
     }
-  }
 
-  console.log(`  Unshielded: (${result.unshieldedUtxos} UTXOs)`);
-  if (result.unshieldedTokens.length === 0) {
-    console.log(`    (none)`);
-  } else {
-    for (const t of result.unshieldedTokens) {
-      console.log(`    ${t.tokenId}: ${t.balance}`);
+    console.log(`  Unshielded: (${result.unshieldedUtxos} UTXOs)`);
+    if (result.unshieldedTokens.length === 0) {
+      console.log(`    (none)`);
+    } else {
+      for (const t of result.unshieldedTokens) {
+        console.log(`    ${t.tokenId}: ${t.balance}`);
+      }
     }
   }
 
