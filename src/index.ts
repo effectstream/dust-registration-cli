@@ -109,8 +109,14 @@ program
   .requiredOption('--cardano-wallet <name>', 'Cardano wallet name')
   .requiredOption('--midnight-wallet <name>', 'Midnight wallet name')
   .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
+  .option('--auto', 'Automatically sign and submit after building', false)
+  .option('--poll', 'Wait for transaction confirmation (used with --auto)', false)
   .action(async (opts) => {
-    await buildTx(opts.cardanoWallet, opts.midnightWallet, opts.account);
+    const unsignedTxPath = await buildTx(opts.cardanoWallet, opts.midnightWallet, opts.account);
+    if (opts.auto) {
+      const signedTxPath = await signTx(opts.cardanoWallet, unsignedTxPath, opts.account);
+      await submitTx(signedTxPath, opts.poll, opts.account);
+    }
   });
 
 program

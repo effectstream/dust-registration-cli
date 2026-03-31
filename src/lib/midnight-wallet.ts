@@ -116,6 +116,8 @@ function sumUnshieldedBalances(
 
 const WALLET_SYNC_THROTTLE_MS = 10_000;
 const WALLET_SYNC_TIMEOUT_MS = 300_000; // 5 minutes
+const DUST_ONLY_STALL_TIMEOUT_MS = 60_000; // 1 minute stall detection for dust-only mode
+const DUST_ONLY_MAX_RETRIES = 5;
 
 // ---------- Main Balance Query ----------
 
@@ -200,15 +202,9 @@ export async function fetchMidnightBalance(
 
   result.unshieldedAddress = unshieldedAddress;
 
-  let wallet: any = null;
-
-  try {
-    // Build wallet facade
-    console.log(`[${walletName}] Connecting to Midnight indexer...`);
-    console.log(`  Indexer: ${networkConfig.indexer}`);
-    console.log(`  Node:    ${networkConfig.node}`);
-
-    wallet = await WalletFacade.init({
+  // Helper: create, start, and return a wallet facade
+  async function createWalletFacade() {
+    const w = await WalletFacade.init({
       configuration: walletConfig,
       shielded: (config: any) => ShieldedWallet(config).startWithSeed(shieldedSeed),
       unshielded: (config: any) =>
@@ -216,7 +212,6 @@ export async function fetchMidnightBalance(
       dust: (config: any) => {
         const savedState = onlyDust ? loadDustState(walletName) : null;
         if (savedState) {
-          console.log(`[${walletName}] Restoring dust wallet from cached state...`);
           return DustWallet(config).restore(savedState);
         }
         return DustWallet(config).startWithSeed(dustSeed, dustParameters);
@@ -226,61 +221,95 @@ export async function fetchMidnightBalance(
           provingServerUrl: new URL(networkConfig.proofServer),
         }),
     });
-
-    // Start wallet sync
     const walletZswapSecretKeys = ZswapSecretKeys.fromSeed(shieldedSeed);
     const walletDustSecretKey = DustSecretKey.fromSeed(dustSeed);
-    await wallet.start(walletZswapSecretKeys, walletDustSecretKey);
+    await w.start(walletZswapSecretKeys, walletDustSecretKey);
+    return w;
+  }
+
+  // Helper: stop wallet and save dust state
+  async function stopAndSaveDust(w: any) {
+    if (!w) return;
+    if (onlyDust) {
+      try {
+        const serialized = await w.dust.serializeState();
+        saveDustState(walletName, serialized);
+      } catch (_e) { /* non-fatal */ }
+    }
+    try { await w.stop(); } catch (_e) { /* ignore */ }
+  }
+
+  let wallet: any = null;
+
+  try {
+    // Build wallet facade
+    if (!onlyDust) {
+      console.log(`[${walletName}] Connecting to Midnight indexer...`);
+      console.log(`  Indexer: ${networkConfig.indexer}`);
+      console.log(`  Node:    ${networkConfig.node}`);
+    }
+
+    wallet = await createWalletFacade();
 
     // Get dust address
     const dustState: any = await Rx.firstValueFrom((wallet as any).dust.state);
     result.dustAddress = MidnightBech32m.encode(midnightNetworkId as any, dustState.address).asString();
 
-    console.log(`  Unshielded: ${unshieldedAddress}`);
-    console.log(`  Dust:       ${result.dustAddress}`);
+    if (!onlyDust) {
+      console.log(`  Unshielded: ${unshieldedAddress}`);
+      console.log(`  Dust:       ${result.dustAddress}`);
+    }
     if (onlyDust) {
-      console.log(`[${walletName}] Syncing dust wallet only...`);
+      // Retry loop: on stall, save progress, recreate wallet, resume from cached state
+      const stallTimeout = DUST_ONLY_STALL_TIMEOUT_MS;
+      let dustSyncedState: any = null;
 
-      // Use DustWallet's own sync observable with correct path: state.state.progress
-      // (dust wallet's highestRelevantWalletIndex is populated from indexer, unlike highestIndex)
-      // Use isCompleteWithin(50n) instead of isStrictlyComplete() to tolerate small gaps
-      // when the chain tip moves during sync. Also detect appliedIndex stabilization as fallback.
-      let lastAppliedIndex = -1n;
-      const dustSyncedState: any = await Rx.firstValueFrom(
-        (wallet as any).dust.state.pipe(
-          Rx.throttleTime(WALLET_SYNC_THROTTLE_MS),
-          // Timeout resets on every emission — only fires if sync stalls completely
-          Rx.timeout({
-            each: syncTimeout,
-            with: () =>
-              Rx.throwError(() => new Error(`Wallet sync stalled (no progress for ${syncTimeout / 1000}s)`)),
-          }),
-          Rx.tap((ds: any) => {
-            const p = ds.state?.progress;
-            const applied = p?.appliedIndex ?? 0n;
-            const target = p?.highestRelevantWalletIndex ?? 0n;
-            const synced = typeof p?.isCompleteWithin === 'function' ? p.isCompleteWithin(50n) : false;
-            console.log(
-              `[${walletName}] sync: dust=${synced} applied=${applied}/${target} (dust-only mode)`,
-            );
-          }),
-          Rx.filter((ds: any) => {
-            const p = ds.state?.progress;
-            if (typeof p?.isCompleteWithin === 'function' && p.isCompleteWithin(50n)) {
-              return true;
-            }
-            // Fallback: if appliedIndex stabilized and connected, consider synced
-            const applied = BigInt(p?.appliedIndex ?? 0);
-            if (applied > 0n && p?.isConnected && applied === lastAppliedIndex) {
-              return true;
-            }
-            lastAppliedIndex = applied;
-            return false;
-          }),
-        ),
-      );
+      for (let attempt = 1; attempt <= DUST_ONLY_MAX_RETRIES; attempt++) {
+        if (attempt > 1) {
+          console.log(`[${walletName}] Retry ${attempt}/${DUST_ONLY_MAX_RETRIES}...`);
+        }
 
-      console.log(`[${walletName}] Dust sync complete, reading balance...`);
+        let lastAppliedIndex = -1n;
+        try {
+          dustSyncedState = await Rx.firstValueFrom(
+            (wallet as any).dust.state.pipe(
+              Rx.throttleTime(WALLET_SYNC_THROTTLE_MS),
+              Rx.timeout({
+                each: stallTimeout,
+                with: () =>
+                  Rx.throwError(() => new Error('stall')),
+              }),
+              Rx.tap((ds: any) => {
+                const p = ds.state?.progress;
+                const applied = p?.appliedIndex ?? 0n;
+                const target = p?.highestRelevantWalletIndex ?? 0n;
+                console.log(`[${walletName}] ${applied}/${target}`);
+              }),
+              Rx.filter((ds: any) => {
+                const p = ds.state?.progress;
+                if (typeof p?.isCompleteWithin === 'function' && p.isCompleteWithin(50n)) {
+                  return true;
+                }
+                const applied = BigInt(p?.appliedIndex ?? 0);
+                if (applied > 0n && p?.isConnected && applied === lastAppliedIndex) {
+                  return true;
+                }
+                lastAppliedIndex = applied;
+                return false;
+              }),
+            ),
+          );
+          break; // sync completed
+        } catch (e: any) {
+          if (e?.message !== 'stall' || attempt === DUST_ONLY_MAX_RETRIES) {
+            throw e;
+          }
+          // Save partial progress, stop wallet, recreate for next attempt
+          console.log(`[${walletName}] Stalled, retrying...`);
+          await stopAndSaveDust(wallet);
+          wallet = await createWalletFacade();
+        }
+      }
 
       // --- Dust balance ---
       try {
@@ -389,28 +418,12 @@ export async function fetchMidnightBalance(
       }
     }
 
-    console.log(`[${walletName}] Done.`);
+    if (!onlyDust) console.log(`[${walletName}] Done.`);
   } catch (e) {
     result.error = e instanceof Error ? e.message : String(e);
     console.error(`[${walletName}] Error: ${result.error}`);
   } finally {
-    if (wallet) {
-      // Persist dust wallet state (even on error/timeout) for faster resume
-      if (onlyDust) {
-        try {
-          const serialized = await (wallet as any).dust.serializeState();
-          saveDustState(walletName, serialized);
-          console.log(`[${walletName}] Dust state cached.`);
-        } catch (_e) {
-          /* non-fatal */
-        }
-      }
-      try {
-        await wallet.stop();
-      } catch (_e) {
-        /* ignore */
-      }
-    }
+    await stopAndSaveDust(wallet);
   }
 
   return result;
