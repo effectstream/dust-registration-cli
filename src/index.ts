@@ -60,24 +60,41 @@ program
   .option('--midnight-wallet <name>', 'Midnight wallet name (queries shielded/unshielded/dust)')
   .option('--all', 'Query all wallets (Cardano and Midnight)')
   .option('--n <count>', 'Number of accounts to query (default: 1)', parseInt)
+  .option('--only-utxo', 'Only query Cardano UTxOs (skip Midnight balance sync)')
+  .option('--only-dust', 'Only sync dust balance (skip shielded/unshielded sync)')
   .action(async (opts) => {
     if (opts.all) {
       const { listCardanoWallets, listMidnightWallets } = await import('./lib/storage.ts');
       const cardanoWallets = listCardanoWallets();
-      const midnightWallets = listMidnightWallets();
       for (const w of cardanoWallets) {
         console.log(`\n=== Cardano: ${w.name} ===`);
         await findUtxos(w.name, opts.n);
       }
-      for (const w of midnightWallets) {
-        console.log(`\n=== Midnight: ${w.name} ===`);
-        await findMidnightBalance(w.name);
-      }
-      if (cardanoWallets.length === 0 && midnightWallets.length === 0) {
-        console.log('No wallets found. Create one first.');
+      if (!opts.onlyUtxo) {
+        const midnightWallets = listMidnightWallets();
+        if (midnightWallets.length > 0) {
+          const BATCH_SIZE = 5;
+          for (let i = 0; i < midnightWallets.length; i += BATCH_SIZE) {
+            const batch = midnightWallets.slice(i, i + BATCH_SIZE);
+            console.log(`\nSyncing Midnight wallets [${i + 1}–${i + batch.length} of ${midnightWallets.length}] in parallel...`);
+            await Promise.all(
+              batch.map(async (w) => {
+                console.log(`\n=== Midnight: ${w.name} ===`);
+                await findMidnightBalance(w.name, opts.onlyDust);
+              }),
+            );
+          }
+        }
+        if (cardanoWallets.length === 0 && listMidnightWallets().length === 0) {
+          console.log('No wallets found. Create one first.');
+        }
+      } else {
+        if (cardanoWallets.length === 0) {
+          console.log('No Cardano wallets found. Create one first.');
+        }
       }
     } else if (opts.midnightWallet) {
-      await findMidnightBalance(opts.midnightWallet);
+      await findMidnightBalance(opts.midnightWallet, opts.onlyDust);
     } else if (opts.wallet) {
       await findUtxos(opts.wallet, opts.n);
     } else {

@@ -80,6 +80,23 @@ export function listMidnightWallets(): MidnightWalletFile[] {
     .map((f) => JSON.parse(fs.readFileSync(path.join(MIDNIGHT_DIR, f), 'utf-8')));
 }
 
+// --- Dust Wallet State Cache ---
+
+const DUST_STATE_DIR = path.join(BASE_DIR, 'dust-state');
+
+export function saveDustState(walletName: string, serializedState: string): string {
+  ensureDir(DUST_STATE_DIR);
+  const filePath = path.join(DUST_STATE_DIR, `${walletName}.json`);
+  fs.writeFileSync(filePath, serializedState);
+  return filePath;
+}
+
+export function loadDustState(walletName: string): string | null {
+  const filePath = path.join(DUST_STATE_DIR, `${walletName}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath, 'utf-8');
+}
+
 // --- Temp Files ---
 
 export function saveTempFile(prefix: string, data: unknown): string {
