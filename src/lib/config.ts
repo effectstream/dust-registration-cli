@@ -32,8 +32,8 @@ const CNIGHT_POLICY_IDS: Record<Network, string> = {
 };
 
 const CNIGHT_ENCODED_NAMES: Record<Network, string> = {
-  Preview: '',
-  Preprod: '',
+  Preview: '4e49474854', // "NIGHT" in hex
+  Preprod: '4e49474854', // "NIGHT" in hex
   Mainnet: '4e49474854', // "NIGHT" in hex
 };
 
