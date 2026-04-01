@@ -157,7 +157,7 @@ The CLI builds the exact same transaction as the dApp's `buildRegistrationTransa
 
 | Network | Policy ID                                                  | Encoded Name           |
 | ------- | ---------------------------------------------------------- | ---------------------- |
-| Preview | `` | *(empty)*              |
-| Preprod | `` | *(empty)*              |
+| Preview | `d2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1` | *(empty)*              |
+| Preprod | `d2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1` | *(empty)*              |
 | Mainnet | `0691b2fecca1ac4f53cb6dfb00b7013e561d1f34403b957cbb5af1fa` | `4e49474854` ("NIGHT") |
 

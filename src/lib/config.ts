@@ -26,8 +26,8 @@ const MIDNIGHT_NETWORK_MAP: Record<Network, string> = {
 };
 
 const CNIGHT_POLICY_IDS: Record<Network, string> = {
-  Preview: '',
-  Preprod: '',
+  Preview: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
+  Preprod: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
   Mainnet: '0691b2fecca1ac4f53cb6dfb00b7013e561d1f34403b957cbb5af1fa',
 };
 
