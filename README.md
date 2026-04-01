@@ -84,10 +84,18 @@ Queries Blockfrost for UTxOs including cNIGHT tokens. With `--n`, shows balances
 ### Build registration transaction
 
 ```bash
+# Using a stored Midnight wallet
 node src/index.ts build-tx --cardano-wallet my-wallet --midnight-wallet my-midnight --account 0
+
+# Using a DUST address directly
+node src/index.ts build-tx --cardano-wallet my-wallet --dust-address dust1abc123... --account 0
 ```
 
 Builds an unsigned transaction that mints a DUST NFT and creates the registration datum on-chain. `--account` selects the CIP-1852 account index, which determines the payment address and stake key used.
+
+The DUST address can be provided in two ways (mutually exclusive):
+- `--midnight-wallet <name>` — loads the DUST address from a stored Midnight wallet
+- `--dust-address <address>` — accepts a bech32m `dust1...` address directly
 
 ### Sign transaction
 
