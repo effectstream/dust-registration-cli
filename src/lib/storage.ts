@@ -97,6 +97,59 @@ export function loadDustState(walletName: string): string | null {
   return fs.readFileSync(filePath, 'utf-8');
 }
 
+// --- UTXO Snapshots (per-wallet cache for quick lookups) ---
+
+const CARDANO_SNAPSHOT_DIR = path.join(BASE_DIR, 'cardano-utxo-snapshots');
+const MIDNIGHT_SNAPSHOT_DIR = path.join(BASE_DIR, 'midnight-balance-snapshots');
+
+export interface CardanoUtxoSnapshot {
+  wallet: string;
+  network: string;
+  timestamp: string;
+  accounts: number;
+  totalLovelace: string;
+  totalCnight: string;
+  utxos: unknown[];
+}
+
+export interface MidnightBalanceSnapshot {
+  wallet: string;
+  network: string;
+  timestamp: string;
+  dustBalance: string;
+  dustUtxos: number;
+  shieldedTokens: { tokenId: string; balance: string }[];
+  shieldedUtxos: number;
+  unshieldedTokens: { tokenId: string; balance: string }[];
+  unshieldedUtxos: number;
+}
+
+export function saveCardanoUtxoSnapshot(walletName: string, data: CardanoUtxoSnapshot): string {
+  ensureDir(CARDANO_SNAPSHOT_DIR);
+  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  return filePath;
+}
+
+export function loadCardanoUtxoSnapshot(walletName: string): CardanoUtxoSnapshot | null {
+  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
+export function saveMidnightBalanceSnapshot(walletName: string, data: MidnightBalanceSnapshot): string {
+  ensureDir(MIDNIGHT_SNAPSHOT_DIR);
+  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  return filePath;
+}
+
+export function loadMidnightBalanceSnapshot(walletName: string): MidnightBalanceSnapshot | null {
+  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+}
+
 // --- Temp Files ---
 
 export function saveTempFile(prefix: string, data: unknown): string {

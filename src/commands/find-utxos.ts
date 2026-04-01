@@ -1,7 +1,7 @@
 import { MeshWallet } from '@meshsdk/wallet';
 import { BlockfrostProvider } from '@meshsdk/core';
 import { loadConfig } from '../lib/config.ts';
-import { loadCardanoWallet, saveTempFile } from '../lib/storage.ts';
+import { loadCardanoWallet, saveTempFile, saveCardanoUtxoSnapshot, loadCardanoUtxoSnapshot } from '../lib/storage.ts';
 
 export async function findUtxos(walletName: string, n?: number) {
   const config = loadConfig();
@@ -9,6 +9,13 @@ export async function findUtxos(walletName: string, n?: number) {
   const accountCount = n ?? 1;
 
   const provider = new BlockfrostProvider(config.blockfrostApiKey);
+
+  // Load previous snapshot
+  const prev = loadCardanoUtxoSnapshot(walletName);
+  if (prev) {
+    const prevAda = Number(BigInt(prev.totalLovelace)) / 1_000_000;
+    console.log(`  Previous (${prev.timestamp}): ${prevAda} ADA / ${prev.totalCnight} cNIGHT (${prev.utxos.length} UTxOs)`);
+  }
 
   let grandTotalLovelace = 0n;
   let grandTotalCnight = 0n;
@@ -87,8 +94,22 @@ export async function findUtxos(walletName: string, n?: number) {
     console.log(`  cNIGHT: ${grandTotalCnight.toString()}`);
   }
 
-  // Save to temp file
-  const filePath = saveTempFile(`utxos-${walletName}`, {
+  // Show delta from previous snapshot
+  if (prev) {
+    const prevLovelace = BigInt(prev.totalLovelace);
+    const prevCnight = BigInt(prev.totalCnight);
+    const deltaLovelace = grandTotalLovelace - prevLovelace;
+    const deltaCnight = grandTotalCnight - prevCnight;
+    if (deltaLovelace !== 0n || deltaCnight !== 0n) {
+      const sign = (v: bigint) => (v > 0n ? '+' : '');
+      console.log(`\n  Delta:  ${sign(deltaLovelace)}${Number(deltaLovelace) / 1_000_000} ADA / ${sign(deltaCnight)}${deltaCnight.toString()} cNIGHT`);
+    } else {
+      console.log('\n  No change from previous snapshot.');
+    }
+  }
+
+  // Save per-wallet snapshot (overwrites previous)
+  const snapshot = {
     wallet: walletName,
     network: config.network,
     timestamp: new Date().toISOString(),
@@ -96,7 +117,11 @@ export async function findUtxos(walletName: string, n?: number) {
     totalLovelace: grandTotalLovelace.toString(),
     totalCnight: grandTotalCnight.toString(),
     utxos: allUtxos,
-  });
+  };
+  const snapshotPath = saveCardanoUtxoSnapshot(walletName, snapshot);
+  console.log(`Snapshot saved: ${snapshotPath}`);
 
-  console.log(`\nSaved to: ${filePath}`);
+  // Also save to temp file for historical record
+  const filePath = saveTempFile(`utxos-${walletName}`, snapshot);
+  console.log(`Saved to: ${filePath}`);
 }

@@ -179,21 +179,6 @@ export async function fetchMidnightBalance(
   const dustSeed = deriveSeedForRole(seed, Roles.Dust);
   const unshieldedSeed = deriveSeedForRole(seed, Roles.NightExternal);
 
-  // Wallet configuration
-  const walletConfig = {
-    indexerClientConnection: {
-      indexerHttpUrl: networkConfig.indexer,
-      indexerWsUrl: networkConfig.indexerWS,
-    },
-    relayURL: new URL(networkConfig.node.replace('http', 'ws')),
-    networkId: midnightNetworkId as any,
-    costParameters: {
-      additionalFeeOverhead: 300_000_000_000_000n,
-      feeBlocksMargin: 5,
-    },
-    txHistoryStorage: new InMemoryTransactionHistoryStorage(),
-  };
-
   // Create keystore and public key for unshielded wallet
   const unshieldedKeystore = createKeystore(unshieldedSeed, midnightNetworkId as any);
   const unshieldedAddress = unshieldedKeystore.getBech32Address().asString();
@@ -203,7 +188,22 @@ export async function fetchMidnightBalance(
   result.unshieldedAddress = unshieldedAddress;
 
   // Helper: create, start, and return a wallet facade
+  // Builds a fresh walletConfig each time so retries get clean connection/storage state
   async function createWalletFacade() {
+    const walletConfig = {
+      indexerClientConnection: {
+        indexerHttpUrl: networkConfig.indexer,
+        indexerWsUrl: networkConfig.indexerWS,
+      },
+      relayURL: new URL(networkConfig.node.replace('http', 'ws')),
+      networkId: midnightNetworkId as any,
+      costParameters: {
+        additionalFeeOverhead: 300_000_000_000_000n,
+        feeBlocksMargin: 5,
+      },
+      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+    };
+
     const w = await WalletFacade.init({
       configuration: walletConfig,
       shielded: (config: any) => ShieldedWallet(config).startWithSeed(shieldedSeed),
