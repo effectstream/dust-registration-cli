@@ -10,14 +10,30 @@ import {
   getLucidScript,
 } from '../lib/contract.ts';
 
-export async function buildTx(cardanoWalletName: string, midnightWalletName: string, accountIndex: number): Promise<string> {
+export async function buildTx(cardanoWalletName: string, midnightWalletName: string | undefined, accountIndex: number, dustAddressOverride?: string): Promise<string> {
   const config = loadConfig();
   const cardanoWallet = loadCardanoWallet(cardanoWalletName);
-  const midnightWallet = loadMidnightWallet(midnightWalletName);
+
+  let dustAddress: string;
+  let dustPKH: string;
+
+  if (dustAddressOverride) {
+    // Decode bech32m dust address directly
+    const { DustAddress, MidnightBech32m } = await import('@midnight-ntwrk/wallet-sdk-address-format');
+    const parsed = MidnightBech32m.parse(dustAddressOverride);
+    const decoded = parsed.decode(DustAddress, config.midnightNetworkId as any);
+    const serializedBytes = decoded.serialize();
+    dustAddress = dustAddressOverride;
+    dustPKH = Buffer.from(serializedBytes).toString('hex');
+  } else {
+    const midnightWallet = loadMidnightWallet(midnightWalletName!);
+    dustAddress = midnightWallet.dustAddress;
+    dustPKH = midnightWallet.dustAddressBytes;
+  }
 
   console.log(`Building registration transaction...`);
   console.log(`  Cardano wallet: ${cardanoWalletName} (account ${accountIndex})`);
-  console.log(`  Midnight wallet: ${midnightWalletName} (${midnightWallet.dustAddress})`);
+  console.log(`  DUST address: ${dustAddress}`);
   console.log(`  Network: ${config.network}`);
 
   // Initialize Lucid with Blockfrost
@@ -41,7 +57,7 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
   // Contract data
   const policyId = getPolicyId(config.network);
   const validatorAddress = getValidatorAddress(config.network);
-  const dustPKH = midnightWallet.dustAddressBytes;
+  // dustPKH already resolved above
   const lucidScript = getLucidScript(config.network);
 
   console.log(`\nContract details:`);
@@ -103,7 +119,8 @@ export async function buildTx(cardanoWalletName: string, midnightWalletName: str
   // Save to file
   const filePath = saveTempFile('unsigned-tx', {
     cardanoWallet: cardanoWalletName,
-    midnightWallet: midnightWalletName,
+    midnightWallet: midnightWalletName ?? null,
+    dustAddress,
     accountIndex,
     network: config.network,
     timestamp: new Date().toISOString(),

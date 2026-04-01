@@ -107,12 +107,21 @@ program
   .command('build-tx')
   .description('Build a DUST registration transaction')
   .requiredOption('--cardano-wallet <name>', 'Cardano wallet name')
-  .requiredOption('--midnight-wallet <name>', 'Midnight wallet name')
+  .option('--midnight-wallet <name>', 'Midnight wallet name')
+  .option('--dust-address <address>', 'DUST address (bech32m dust1... string)')
   .requiredOption('--account <index>', 'CIP-1852 account index', parseInt)
   .option('--auto', 'Automatically sign and submit after building', false)
   .option('--poll', 'Wait for transaction confirmation (used with --auto)', false)
   .action(async (opts) => {
-    const unsignedTxPath = await buildTx(opts.cardanoWallet, opts.midnightWallet, opts.account);
+    if (!opts.midnightWallet && !opts.dustAddress) {
+      console.error('Error: Provide either --midnight-wallet or --dust-address');
+      process.exit(1);
+    }
+    if (opts.midnightWallet && opts.dustAddress) {
+      console.error('Error: Provide either --midnight-wallet or --dust-address, not both');
+      process.exit(1);
+    }
+    const unsignedTxPath = await buildTx(opts.cardanoWallet, opts.midnightWallet, opts.account, opts.dustAddress);
     if (opts.auto) {
       const signedTxPath = await signTx(opts.cardanoWallet, unsignedTxPath, opts.account);
       await submitTx(signedTxPath, opts.poll, opts.account);
