@@ -210,7 +210,7 @@ export async function fetchMidnightBalance(
       unshielded: (config: any) =>
         UnshieldedWallet(config).startWithPublicKey(unshieldedPublicKey),
       dust: (config: any) => {
-        const savedState = onlyDust ? loadDustState(walletName) : null;
+        const savedState = onlyDust ? loadDustState(walletName, midnightNetworkId) : null;
         if (savedState) {
           return DustWallet(config).restore(savedState);
         }
@@ -233,7 +233,7 @@ export async function fetchMidnightBalance(
     if (onlyDust) {
       try {
         const serialized = await w.dust.serializeState();
-        saveDustState(walletName, serialized);
+        saveDustState(walletName, midnightNetworkId, serialized);
       } catch (_e) { /* non-fatal */ }
     }
     try { await w.stop(); } catch (_e) { /* ignore */ }

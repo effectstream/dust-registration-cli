@@ -84,15 +84,15 @@ export function listMidnightWallets(): MidnightWalletFile[] {
 
 const DUST_STATE_DIR = path.join(BASE_DIR, 'dust-state');
 
-export function saveDustState(walletName: string, serializedState: string): string {
+export function saveDustState(walletName: string, network: string, serializedState: string): string {
   ensureDir(DUST_STATE_DIR);
-  const filePath = path.join(DUST_STATE_DIR, `${walletName}.json`);
+  const filePath = path.join(DUST_STATE_DIR, `${walletName}.${network}.json`);
   fs.writeFileSync(filePath, serializedState);
   return filePath;
 }
 
-export function loadDustState(walletName: string): string | null {
-  const filePath = path.join(DUST_STATE_DIR, `${walletName}.json`);
+export function loadDustState(walletName: string, network: string): string | null {
+  const filePath = path.join(DUST_STATE_DIR, `${walletName}.${network}.json`);
   if (!fs.existsSync(filePath)) return null;
   return fs.readFileSync(filePath, 'utf-8');
 }
@@ -124,28 +124,28 @@ export interface MidnightBalanceSnapshot {
   unshieldedUtxos: number;
 }
 
-export function saveCardanoUtxoSnapshot(walletName: string, data: CardanoUtxoSnapshot): string {
+export function saveCardanoUtxoSnapshot(walletName: string, network: string, data: CardanoUtxoSnapshot): string {
   ensureDir(CARDANO_SNAPSHOT_DIR);
-  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.json`);
+  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.${network}.json`);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   return filePath;
 }
 
-export function loadCardanoUtxoSnapshot(walletName: string): CardanoUtxoSnapshot | null {
-  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.json`);
+export function loadCardanoUtxoSnapshot(walletName: string, network: string): CardanoUtxoSnapshot | null {
+  const filePath = path.join(CARDANO_SNAPSHOT_DIR, `${walletName}.${network}.json`);
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
-export function saveMidnightBalanceSnapshot(walletName: string, data: MidnightBalanceSnapshot): string {
+export function saveMidnightBalanceSnapshot(walletName: string, network: string, data: MidnightBalanceSnapshot): string {
   ensureDir(MIDNIGHT_SNAPSHOT_DIR);
-  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.json`);
+  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.${network}.json`);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   return filePath;
 }
 
-export function loadMidnightBalanceSnapshot(walletName: string): MidnightBalanceSnapshot | null {
-  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.json`);
+export function loadMidnightBalanceSnapshot(walletName: string, network: string): MidnightBalanceSnapshot | null {
+  const filePath = path.join(MIDNIGHT_SNAPSHOT_DIR, `${walletName}.${network}.json`);
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }

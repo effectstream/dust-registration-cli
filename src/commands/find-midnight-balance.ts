@@ -7,7 +7,7 @@ export async function findMidnightBalance(walletName: string, onlyDust?: boolean
   const walletFile = loadMidnightWallet(walletName);
 
   // Load previous snapshot
-  const prev = loadMidnightBalanceSnapshot(walletName);
+  const prev = loadMidnightBalanceSnapshot(walletName, config.midnightNetworkId);
   if (prev && !onlyDust) {
     const prevDust = Number(BigInt(prev.dustBalance)) / 1e15;
     const prevDustFmt = prevDust.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
@@ -48,7 +48,7 @@ export async function findMidnightBalance(walletName: string, onlyDust?: boolean
     unshieldedTokens: (result.unshieldedTokens ?? []).map((t: any) => ({ tokenId: t.tokenId, balance: t.balance.toString() })),
     unshieldedUtxos: result.unshieldedUtxos ?? 0,
   };
-  saveMidnightBalanceSnapshot(walletName, snapshot);
+  saveMidnightBalanceSnapshot(walletName, config.midnightNetworkId, snapshot);
 
   if (onlyDust) {
     // Compact single-line output
