@@ -11,7 +11,7 @@ export async function findUtxos(walletName: string, n?: number) {
   const provider = new BlockfrostProvider(config.blockfrostApiKey);
 
   // Load previous snapshot
-  const prev = loadCardanoUtxoSnapshot(walletName);
+  const prev = loadCardanoUtxoSnapshot(walletName, config.network);
   if (prev) {
     const prevAda = Number(BigInt(prev.totalLovelace)) / 1_000_000;
     console.log(`  Previous (${prev.timestamp}): ${prevAda} ADA / ${prev.totalCnight} cNIGHT (${prev.utxos.length} UTxOs)`);
@@ -118,7 +118,7 @@ export async function findUtxos(walletName: string, n?: number) {
     totalCnight: grandTotalCnight.toString(),
     utxos: allUtxos,
   };
-  const snapshotPath = saveCardanoUtxoSnapshot(walletName, snapshot);
+  const snapshotPath = saveCardanoUtxoSnapshot(walletName, config.network, snapshot);
   console.log(`Snapshot saved: ${snapshotPath}`);
 
   // Also save to temp file for historical record

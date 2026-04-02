@@ -47,11 +47,14 @@ export function loadConfig(): CliConfig {
 
   const blockfrostApiKey = process.env.BLOCKFROST_API_KEY;
   if (!blockfrostApiKey) {
-    throw new Error('BLOCKFROST_API_KEY env var is required');
+    throw new Error('BLOCKFROST_API_KEY env var is required. Get a free key at https://blockfrost.io/');
   }
 
-  const cnightPolicyId = process.env.CNIGHT_POLICY_ID ?? CNIGHT_POLICY_IDS[network];
-  const cnightEncodedName = process.env.CNIGHT_ENCODED_NAME ?? CNIGHT_ENCODED_NAMES[network];
+  const cnightPolicyId = CNIGHT_POLICY_IDS[network];
+  if (!cnightPolicyId) {
+    throw new Error(`cNIGHT policy ID is not configured for network: ${network}`);
+  }
+  const cnightEncodedName = CNIGHT_ENCODED_NAMES[network];
 
   return {
     network,
